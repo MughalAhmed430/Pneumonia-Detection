@@ -130,7 +130,9 @@ The logic is in `CheXNet/inference_engine.py`.
 
 ### Step 1: Validate the input
 
-The model will return scores for any picture, including a photo of a cat, so `validate_chest_xray` applies simple image checks first:
+The model will return scores for any picture, including a photo of a cat, so `validate_chest_xray` checks each image in two stages. If either stage fails, the page shows the reason and no result.
+
+**Stage 1: basic image rules**
 
 | Check | Requirement |
 |---|---|
@@ -139,11 +141,29 @@ The model will return scores for any picture, including a photo of a cat, so `va
 | Color | Close to grayscale (limits on saturation and on differences between color channels) |
 | Contrast | Grayscale standard deviation of at least 12 |
 | Not a document | At most 60% of pixels are nearly white |
-| Not a limb X-ray | Rejected if over 65% of pixels are nearly black and the top corners are dark |
-| Chest anatomy | The center must differ from the lung regions by at least 6 gray levels |
-| Symmetry | The left and right lung regions differ by at most 38% |
 
-These are fixed rules and not a trained classifier, so they can make mistakes (see [Limitations](#13-limitations)).
+**Stage 2: trained chest X-ray check**
+
+Basic rules cannot separate a chest X-ray from other gray pictures such as a CT slice, a hand X-ray or a black-and-white photo. Two small logistic regression models make that decision. Both read the 1,024 features CheXNet already computes for the image, and one also reads a 24 x 24 summary of the image layout. An image must pass both. The fitted values are stored in `CheXNet/chest_xray_check.npz`.
+
+The check was trained on two groups of images:
+
+- **Real frontal chest X-rays:** NIH training and validation images, copies of those with varied exposure and cropping, and 498 X-rays from outside NIH (the public COVID-19 Image Data Collection and Wikimedia Commons).
+- **Other pictures (2,495):** color and black-and-white photos, documents, screenshots, drawings, anatomy illustrations, CT, MRI, ultrasound, X-rays of other body parts, side-view chest X-rays, and upside-down, sideways or inverted X-rays.
+
+Measured results:
+
+| Images | Result |
+|---|---|
+| NIH test images, never used for training | 13 of 1,045 wrongly rejected (1.2%) |
+| Chest X-rays from other hospitals\* | 18 of 450 wrongly rejected (4.0%) |
+| Chest X-rays from the web\* | 7 of 48 wrongly rejected (14.6%) |
+| Other pictures\* | 5 of 2,495 wrongly accepted (0.20%) |
+| Other pictures, with that whole type left out of training | 17 of 2,495 wrongly accepted (0.68%) |
+
+\* Each image was scored by a model that did not train on it or on others from the same patient or source page.
+
+The earlier fixed rules accepted 843 of the same 2,495 pictures (33.8%) and rejected 70 of the 1,045 NIH test images (6.7%). No check of this kind is perfect (see [Limitations](#13-limitations)).
 
 ### Step 2: Preprocess
 
@@ -219,6 +239,7 @@ Pneumonia Detection/
     ├── evaluate_subset.py     CPU evaluation on the test images available locally
     ├── test_app.py            Automated tests
     ├── model.pth.tar          Trained checkpoint
+    ├── chest_xray_check.npz   Trained check that recognizes chest X-rays
     ├── README.md              README of the original reimplementation
     ├── samples/               Five preset X-rays from the test list
     ├── localization/          Example heatmaps from the original reimplementation
@@ -331,7 +352,7 @@ Start the server in one terminal, then run this in a second terminal from the `C
 python test_app.py
 ```
 
-The 10 tests cover model loading, prediction, heatmap recomputation, rejection of color and blank images, and the API endpoints. All 10 pass.
+The 13 tests cover model loading, prediction, heatmap recomputation, acceptance of the preset X-rays, rejection of color, blank, altered and non-X-ray images, and the API endpoints. All 13 pass.
 
 ### Evaluation on the local test images
 
@@ -404,7 +425,7 @@ Prediction took about 100 to 200 ms per image on the CPU of the test computer.
 - **Scores are not true probabilities.** A score of 40% does not mean a 40% chance of disease. Pneumonia is present in about 1% of the local test images, but 44% of them scored above the 35% threshold. The class-weighted training loss described in the CheXNet paper is a likely reason.
 - **Imperfect labels.** The labels were mined from reports, so both training and evaluation inherit their errors.
 - **Heatmaps are coarse.** They begin as a 7 x 7 grid and show where the model responded, which is not an exact outline of a lesion.
-- **The validator makes mistakes.** It rejected 70 of the 1,045 real test images (6.7%), often on the symmetry rule, and it could accept an unusual image that is not a chest X-ray.
+- **The validator can still make mistakes.** It wrongly rejected 1.2% of the NIH test images and 4.0% of chest X-rays from other hospitals, and it wrongly accepted 5 of 2,495 other pictures: two collages of chest films, a shoulder X-ray, a spine X-ray and an ultrasound image. Its training pictures came from a limited set of sources, so a type of image it has never seen could still pass.
 - **Single-resize preprocessing.** The application does not use the ten-crop averaging behind the published values, which trades some accuracy for speed.
 - **Partial evaluation.** Local results cover one of the 12 archives.
 - **Single-user design.** The heatmap cache holds one image for the whole server, so simultaneous users could affect each other's heatmaps.
@@ -415,7 +436,7 @@ Prediction took about 100 to 200 ms per image on the CPU of the test computer.
 
 - Run the full evaluation on all 12 archives.
 - Calibrate the scores and choose a separate threshold for each disease.
-- Replace the fixed validation rules with a small trained classifier.
+- Train the chest X-ray check on images from more hospitals.
 - Add DICOM input.
 - Keep cached data per request so several users can work at once.
 - Retrain on a larger and more recent dataset with better labels.
@@ -430,12 +451,14 @@ Prediction took about 100 to 200 ms per image on the CPU of the test computer.
 | `Checkpoint not found` when running tests | Run `test_app.py` from inside the `CheXNet` folder |
 | Connection errors in the API tests | Start `python app.py` in another terminal first |
 | `OpenBLAS error: Memory allocation still failed` | Run `$env:OPENBLAS_NUM_THREADS = 1` in that terminal and try again. This can happen when a second Python process starts while the server is running |
-| A real X-ray shows **Sample Not Acceptable** | Validation is rule-based and rejects some real images. Use a frontal grayscale image without large borders |
+| `Chest X-ray check not found` | Make sure `CheXNet/chest_xray_check.npz` is in the project |
+| A real X-ray shows **Sample Not Acceptable** | The check rejects a small share of real X-rays, and tinted images fail the color rule. Use a frontal grayscale image without large borders |
 
 ## 16. References
 
 1. Rajpurkar, P., et al. *CheXNet: Radiologist-Level Pneumonia Detection on Chest X-Rays with Deep Learning.* arXiv:1711.05225, 2017.
 2. Wang, X., et al. *ChestX-ray8: Hospital-scale Chest X-ray Database and Benchmarks on Weakly-Supervised Classification and Localization of Common Thorax Diseases.* CVPR 2017.
 3. Huang, G., et al. *Densely Connected Convolutional Networks.* CVPR 2017.
+4. Cohen, J. P., et al. *COVID-19 Image Data Collection.* arXiv:2003.11597, 2020.
 4. Zhou, B., et al. *Learning Deep Features for Discriminative Localization.* CVPR 2016.
 5. Weng, X., Zhuang, N., Tian, J., Liu, Y. *CheXNet for Classification and Localization of Thoracic Diseases.* <https://github.com/arnoweng/CheXNet>

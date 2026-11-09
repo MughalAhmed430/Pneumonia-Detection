@@ -122,6 +122,42 @@ COLORMAP_DICT = {
 }
 
 
+CHEST_XRAY_CHECK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'chest_xray_check.npz')
+
+
+class ChestXrayCheck:
+    """
+    Trained check that decides whether an image is a frontal chest X-ray.
+    Two small logistic regression models read the features CheXNet already computes,
+    and the second also reads a 24x24 summary of the image layout. Both must accept.
+    """
+
+    def __init__(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Chest X-ray check not found at: {path}")
+        with np.load(path) as stored:
+            self.params = {key: stored[key] for key in stored.files}
+        self.grid = int(self.params['thumb_grid'])
+
+    def _project(self, values, prefix):
+        p = self.params
+        scaled = (values - p[prefix + '_mean']) / p[prefix + '_scale']
+        return (scaled - p[prefix + '_pca_mean']) @ p[prefix + '_pca'].T
+
+    def _score(self, key, pooled, layout):
+        parts = [self._project(pooled, key + '_f')]
+        if key + '_t_pca' in self.params:
+            parts.append(self._project(layout, key + '_t'))
+        return float(np.concatenate(parts) @ self.params[key + '_coef'] + self.params[key + '_intercept'])
+
+    def accepts(self, pil_rgb, pooled):
+        small = pil_rgb.convert('L').resize((self.grid, self.grid), Image.BILINEAR)
+        layout = np.asarray(small, dtype=np.float32)
+        layout = ((layout - layout.mean()) / (layout.std() + 1e-3)).ravel()
+        return all(self._score(key, pooled, layout) >= float(self.params['threshold_' + key])
+                   for key in ('a', 'b'))
+
+
 class CheXNetEngine:
     def __init__(self, ckpt_path='model.pth.tar', device=None):
         self.ckpt_path = ckpt_path
@@ -140,6 +176,7 @@ class CheXNetEngine:
         # In-memory feature cache for fast CAM re-computation
         self.last_cache = None
         self._load_model()
+        self.xray_check = ChestXrayCheck(CHEST_XRAY_CHECK_PATH)
 
     def _load_model(self):
         print(f"[CheXNetEngine] Initializing model on {self.device}...")
@@ -260,14 +297,16 @@ class CheXNetEngine:
             'box': box
         }
 
-    def validate_chest_xray(self, pil_image):
+    def validate_chest_xray(self, pil_image, pooled=None):
         """
         Validates whether an input image is a genuine frontal chest (lung) X-ray.
-        Rejects non-chest images (color photos, natural scenes, documents, extremities, etc.)
+        Basic image rules run first, then the trained chest X-ray check.
+        pooled: the 1024-value CheXNet feature vector, if the caller already computed it.
         Returns (is_valid: bool, message: str)
         """
+        pil_image = pil_image.convert('RGB')
         w, h = pil_image.size
-        
+
         # 1. Aspect ratio check
         aspect_ratio = w / float(h)
         if aspect_ratio < 0.55 or aspect_ratio > 1.75:
@@ -276,14 +315,7 @@ class CheXNetEngine:
         if w < 120 or h < 120:
             return False, "This sample is not acceptable. Image resolution is too low for radiological analysis."
             
-        # Convert to OpenCV numpy formats
-        np_img = np.array(pil_image)
-        if len(np_img.shape) == 2:
-            img_bgr = cv2.cvtColor(np_img, cv2.COLOR_GRAY2BGR)
-        elif np_img.shape[2] == 4:
-            img_bgr = cv2.cvtColor(np_img, cv2.COLOR_RGBA2BGR)
-        else:
-            img_bgr = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
+        img_bgr = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
         # 2. Color saturation test
         hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
@@ -309,32 +341,18 @@ class CheXNetEngine:
             return False, "This sample is not acceptable. The image is blank or lacks diagnostic radiographic contrast."
             
         extreme_white = float((gray > 240).mean())
-        extreme_black = float((gray < 15).mean())
         if extreme_white > 0.60:
             return False, "This sample is not acceptable. The image appears to be a text document or graphic rather than a chest X-ray."
 
-        # 4. Thoracic Anatomical Landmark & Lung Silhouette Analysis
-        r256 = cv2.resize(gray, (256, 256)).astype(np.float32)
-        
-        left_lung = float(r256[70:170, 40:96].mean())
-        right_lung = float(r256[70:170, 160:216].mean())
-        center_mediastinum = float(r256[80:190, 100:156].mean())
-        lung_mean = (left_lung + right_lung) / 2.0
-        
-        med_contrast = center_mediastinum - lung_mean
-        symm_diff = abs(left_lung - right_lung) / (lung_mean + 1e-5)
-        corner_mean = float((r256[:25, :25].mean() + r256[:25, -25:].mean()) / 2.0)
-        
-        # Bone/extremity check: black background (>65% black) with bone in center
-        if extreme_black > 0.65 and corner_mean < 8.0:
-            return False, "This sample is not acceptable. The image appears to be an extremity (bone/joint) X-ray rather than a chest radiograph."
-            
-        # Check for presence of thoracic anatomy
-        if -6.0 < med_contrast < 6.0:
-            return False, "This sample is not acceptable. The image does not exhibit anatomical thoracic lung fields and cardiac silhouette."
-            
-        if symm_diff > 0.38:
-            return False, "This sample is not acceptable. Asymmetric bilateral profile does not correspond to a frontal chest radiograph."
+        # 4. Trained check on the CheXNet features and the image layout
+        if pooled is None:
+            inp_tensor = self.transform(pil_image).unsqueeze(0).to(self.device)
+            with torch.no_grad():
+                features = F.relu(self.model.densenet121.features(inp_tensor))
+                pooled = F.adaptive_avg_pool2d(features, (1, 1)).view(1, -1)
+
+        if not self.xray_check.accepts(pil_image, pooled.cpu().numpy()[0]):
+            return False, "This sample is not acceptable. Only frontal chest X-rays can be analyzed, and this image does not appear to be one."
 
         return True, "Valid frontal chest X-ray radiograph."
 
@@ -346,11 +364,22 @@ class CheXNetEngine:
         """
         start_time = time.time()
         orig_rgb = pil_image.convert('RGB')
-        
-        # Perform thoracic chest X-ray validation
-        is_valid, validation_note = self.validate_chest_xray(orig_rgb)
+        orig_w, orig_h = orig_rgb.size
+        orig_bgr = cv2.cvtColor(np.array(orig_rgb), cv2.COLOR_RGB2BGR)
+
+        # Prepare tensor
+        inp_tensor = self.transform(orig_rgb).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            features = self.model.densenet121.features(inp_tensor)
+            features = F.relu(features, inplace=True)
+            pooled = F.adaptive_avg_pool2d(features, (1, 1)).view(features.size(0), -1)
+            logits = self.model.densenet121.classifier[0](pooled)
+            probs = torch.sigmoid(logits)[0].cpu().numpy()
+
+        # Perform thoracic chest X-ray validation before any result is used
+        is_valid, validation_note = self.validate_chest_xray(orig_rgb, pooled=pooled)
         if not is_valid:
-            orig_bgr = cv2.cvtColor(np.array(orig_rgb), cv2.COLOR_RGB2BGR)
             return {
                 'is_valid_chest_xray': False,
                 'rejection_note': validation_note,
@@ -359,19 +388,6 @@ class CheXNetEngine:
                     'original': self._cv2_to_base64(orig_bgr)
                 }
             }
-
-        orig_w, orig_h = orig_rgb.size
-        orig_bgr = cv2.cvtColor(np.array(orig_rgb), cv2.COLOR_RGB2BGR)
-        
-        # Prepare tensor
-        inp_tensor = self.transform(orig_rgb).unsqueeze(0).to(self.device)
-        
-        with torch.no_grad():
-            features = self.model.densenet121.features(inp_tensor)
-            features = F.relu(features, inplace=True)
-            pooled = F.adaptive_avg_pool2d(features, (1, 1)).view(features.size(0), -1)
-            logits = self.model.densenet121.classifier[0](pooled)
-            probs = torch.sigmoid(logits)[0].cpu().numpy()
 
         latency_ms = round((time.time() - start_time) * 1000, 1)
         

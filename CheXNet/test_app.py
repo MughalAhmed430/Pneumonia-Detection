@@ -5,10 +5,12 @@ Automated test suite verifying model loading, multi-label prediction,
 CAM localization, and HTTP REST API endpoints.
 """
 
+import glob
 import os
 import unittest
+import numpy as np
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw
 from inference_engine import CheXNetEngine, CLASS_NAMES
 
 BASE_URL = "http://127.0.0.1:5000"
@@ -62,6 +64,39 @@ class TestCheXNetEngine(unittest.TestCase):
         self.assertFalse(res.get("is_valid_chest_xray", True))
         self.assertIn("This sample is not acceptable", res.get("rejection_note", ""))
         print(f"  [OK] Blank image properly rejected: '{res['rejection_note']}'")
+
+    def test_11_accept_all_presets(self):
+        paths = sorted(glob.glob(os.path.join("samples", "*.png")))
+        self.assertGreaterEqual(len(paths), 5)
+        for path in paths:
+            is_valid, note = self.engine.validate_chest_xray(Image.open(path))
+            self.assertTrue(is_valid, f"{path}: {note}")
+        print(f"  [OK] All {len(paths)} preset chest X-rays accepted.")
+
+    def test_12_reject_altered_xray(self):
+        img = Image.open(os.path.join("samples", "sample_5_nih_patient.png")).convert("RGB")
+        altered = {
+            "upside-down": img.transpose(Image.ROTATE_180),
+            "inverted": Image.fromarray(255 - np.asarray(img)),
+        }
+        for name, picture in altered.items():
+            res = self.engine.predict(picture)
+            self.assertFalse(res.get("is_valid_chest_xray", True), name)
+            self.assertIn("This sample is not acceptable", res.get("rejection_note", ""))
+        print("  [OK] Upside-down and inverted X-rays properly rejected.")
+
+    def test_13_reject_grayscale_non_xray(self):
+        rng = np.random.RandomState(0)
+        picture = Image.new("L", (512, 512), 30)
+        draw = ImageDraw.Draw(picture)
+        for _ in range(12):
+            x, y = rng.randint(0, 512, 2)
+            r = rng.randint(20, 140)
+            draw.ellipse([x - r, y - r, x + r, y + r], fill=int(rng.randint(60, 255)))
+        res = self.engine.predict(picture)
+        self.assertFalse(res.get("is_valid_chest_xray", True))
+        self.assertIn("This sample is not acceptable", res.get("rejection_note", ""))
+        print(f"  [OK] Grayscale non-X-ray picture properly rejected: '{res['rejection_note']}'")
 
 
 class TestCheXNetAPI(unittest.TestCase):
