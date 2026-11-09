@@ -205,7 +205,7 @@ class CheXNetEngine:
             
         # Resize CAM to original image dimensions
         cam_resized = cv2.resize(cam_norm, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
-        cam_u8 = (cam_resized * 255).astype(np.uint8)
+        cam_u8 = (np.clip(cam_resized, 0.0, 1.0) * 255).astype(np.uint8)
         
         # Apply colormap
         cv_cmap = COLORMAP_DICT.get(colormap.lower(), cv2.COLORMAP_JET)

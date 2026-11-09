@@ -5,10 +5,14 @@ in ChestX-ray14/images. It uses the same preprocessing as the web application
 (one resize to 224 x 224, no ten-crop), so it runs on a CPU and works with a
 partial download of the dataset.
 
-Usage: python evaluate_subset.py
+Usage: python evaluate_subset.py [--untrained]
+
+With --untrained, the same network is scored with a random last layer instead
+of the trained checkpoint, which shows how much of the result comes from training.
 """
 
 import os
+import sys
 
 os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 
@@ -18,6 +22,7 @@ from PIL import Image
 from sklearn.metrics import roc_auc_score
 
 from inference_engine import CheXNetEngine, CLASS_NAMES
+from model import DenseNet121
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGE_DIR = os.path.join(BASE_DIR, 'ChestX-ray14', 'images')
@@ -68,6 +73,9 @@ def main():
         raise SystemExit('No test images found in ' + IMAGE_DIR)
 
     engine = CheXNetEngine(ckpt_path=os.path.join(BASE_DIR, 'model.pth.tar'))
+    if '--untrained' in sys.argv:
+        torch.manual_seed(0)
+        engine.model = DenseNet121(len(CLASS_NAMES)).eval()
     scores, rejected = score_images(engine, rows)
     labels = np.array([row[1] for row in rows])
 

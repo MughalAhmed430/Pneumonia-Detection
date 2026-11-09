@@ -43,6 +43,8 @@ The project therefore has four goals:
 
 ## 2. The solution
 
+![Workflow of the application, from uploading an X-ray to seeing the result](docs/workflow_diagram.png)
+
 ```
 Browser (upload or preset image)
         |
@@ -109,6 +111,8 @@ The full image set is about 42 GB across 12 archives, so the images are not stor
 Only the first archive was used here. It contains 4,999 images (1.9 GB extracted), and 1,045 of them, from 259 patients, are in the test list. Instructions to download it are in [section 8](#optional-download-the-dataset). The application itself does not need the dataset.
 
 ## 4. The model
+
+![How the model was made and what this project added](docs/model_creation_diagram.png)
 
 CheXNet is a DenseNet-121 convolutional network adapted to chest X-rays.
 
@@ -190,6 +194,7 @@ Here `f_k` is feature map `k` and `w_c,k` is the classifier weight connecting it
 | A score without an explanation is hard to trust | Class Activation Maps for all 14 diseases |
 | Recomputing the network every time the user selects another disease would waste time | The feature maps from the last image are cached, and `/api/recompute_cam` reuses them without another forward pass |
 | Users can upload anything | The validation step rejects unsuitable images before the model runs |
+| Smoothing a heatmap can push values slightly outside the 0 to 1 range, which wraps around to the wrong color and misplaces the hotspot box | Values are clipped to the 0 to 1 range before they are converted to colors |
 | Not every computer has a GPU | The engine uses CUDA when available and otherwise falls back to CPU. The checkpoint is always loaded through the CPU first |
 | The dataset is too large for Git and for a quick setup | Images are ignored by Git, and the application works without them |
 | Demo images must not be images the model was trained on | All five presets come from `test_list.txt` (see below) |
@@ -205,6 +210,7 @@ Each preset is the first image in `test_list.txt`, within the first archive, tha
 Pneumonia Detection/
 ├── README.md                  This document
 ├── start_interface.bat        Starts the server and opens the browser on Windows
+├── docs/                      Workflow and model diagrams
 └── CheXNet/
     ├── app.py                 Flask server and REST API
     ├── inference_engine.py    Validation, prediction, heatmaps, text summary
@@ -335,6 +341,8 @@ python evaluate_subset.py
 ```
 
 This scores every `test_list.txt` image found in `ChestX-ray14/images/` and prints the AUROC per disease. With the first archive it takes about two minutes on a CPU.
+
+Add `--untrained` to score the same network with a random last layer instead. Its mean AUROC is 0.496, which is chance level, compared with 0.840 for the trained model.
 
 ### Full evaluation
 
