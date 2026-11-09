@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CheXNet AI — Thoracic Disease Diagnostic & Localization Platform</title>
+  <meta name="description" content="State-of-the-art chest radiograph pathology detection and Class Activation Mapping (CAM) localization powered by CheXNet DenseNet-121.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Header / Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">CheXNet <span class="badge-ai">AI DIAGNOSTICS</span></div>
+          <div class="brand-subtitle">DenseNet-121 • 14 Thoracic Diseases • CAM Localization</div>
+        </div>
+      </div>
+      
+      <div class="nav-actions">
+        <div class="status-indicator">
+          <span class="pulse-dot"></span>
+          <span id="model-status-text">Engine Ready</span>
+        </div>
+        <button id="btn-benchmark-modal" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          Model Benchmark & Test
+        </button>
+        <button id="btn-info-modal" class="btn btn-icon" title="Architecture & Papers Info">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Layout -->
+  <main class="app-layout">
+    <!-- Left Column: Input, Preset Test Gallery, File Upload -->
+    <aside class="sidebar-panel">
+      <!-- Quick Preset Test Suite -->
+      <section class="card preset-section">
+        <div class="card-header">
+          <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            Preset Test Cases
+          </h3>
+          <span class="badge-pill">1-Click Test</span>
+        </div>
+        <p class="section-desc">Select an authentic patient case or simulated pathology to immediately evaluate CheXNet:</p>
+        
+        <div id="preset-list" class="preset-gallery">
+          <!-- Populated dynamically via JS -->
+          <div class="preset-loading">Loading preset test cases...</div>
+        </div>
+      </section>
+
+      <!-- Custom Upload Area -->
+      <section class="card upload-section">
+        <div class="card-header">
+          <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Upload Chest X-Ray
+          </h3>
+        </div>
+        
+        <div id="dropzone" class="dropzone">
+          <input type="file" id="file-input" accept="image/jpeg, image/png, image/webp" hidden>
+          <div class="dropzone-content">
+            <div class="upload-icon-pulse">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+            </div>
+            <div class="drop-text-primary">Drag & drop radiograph here</div>
+            <div class="drop-text-secondary">or <span class="browse-link">browse files</span> (PNG, JPG, DICOM-export)</div>
+            <div class="drop-specs">Frontal view PA or AP thoracic projection</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Clinical Diagnostic Memo Box -->
+      <section class="card report-section">
+        <div class="card-header">
+          <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            Radiology Diagnostic Memo
+          </h3>
+          <button id="btn-copy-report" class="btn btn-sm btn-outline" title="Copy text to clipboard">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copy
+          </button>
+        </div>
+        <div id="report-content" class="report-box">
+          <div class="report-empty">Select or upload a chest X-ray to generate clinical interpretation and findings memo.</div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Center/Right Column: Interactive X-Ray Viewer & CAM Heatmap Matrix -->
+    <div class="center-content">
+      <!-- Viewer Controls Toolbar -->
+      <div class="viewer-card">
+        <div class="viewer-toolbar">
+          <div class="view-mode-tabs">
+            <button class="mode-tab active" data-mode="split" id="tab-split">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="12" y1="3" x2="12" y2="21"></line>
+              </svg>
+              Interactive Wipe (Split)
+            </button>
+            <button class="mode-tab" data-mode="overlay" id="tab-overlay">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="10 8 16 12 10 16 10 8"></polygon>
+              </svg>
+              Blended Overlay
+            </button>
+            <button class="mode-tab" data-mode="side-by-side" id="tab-side">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="9" height="18" rx="1"></rect>
+                <rect x="13" y="3" width="9" height="18" rx="1"></rect>
+              </svg>
+              Side-by-Side
+            </button>
+          </div>
+
+          <div class="toolbar-tools">
+            <!-- Heatmap Opacity Control -->
+            <div class="tool-group" id="opacity-tool-group">
+              <label for="alpha-slider">Alpha: <span id="alpha-val">45%</span></label>
+              <input type="range" id="alpha-slider" min="0" max="1" step="0.05" value="0.45">
+            </div>
+
+            <!-- Colormap Selector -->
+            <div class="tool-group">
+              <label for="colormap-select">Colormap:</label>
+              <select id="colormap-select" class="custom-select">
+                <option value="jet" selected>Jet (Clinical Standard)</option>
+                <option value="turbo">Turbo (High Dynamic)</option>
+                <option value="inferno">Inferno</option>
+                <option value="plasma">Plasma</option>
+                <option value="viridis">Viridis</option>
+              </select>
+            </div>
+
+            <!-- Bounding Box Toggle -->
+            <button id="btn-toggle-box" class="btn btn-sm btn-toggle active" title="Toggle Pathology Hotspot Region">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              </svg>
+              Hotspot Box
+            </button>
+
+            <!-- Invert Radiograph Colors -->
+            <button id="btn-invert" class="btn btn-sm btn-outline" title="Invert Grayscale (Negative/Positive)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 2a10 10 0 0 0 0 20z"></path>
+              </svg>
+              Invert
+            </button>
+          </div>
+        </div>
+
+        <!-- The Image Canvas / Viewing Stage -->
+        <div class="canvas-stage" id="canvas-stage">
+          <!-- Split View Container (Default) -->
+          <div id="split-container" class="split-comparison-container">
+            <div class="image-wrapper base-image-wrapper">
+              <img id="img-base" src="" alt="Base Chest Radiograph" class="stage-img">
+            </div>
+            <div id="split-overlay-wrapper" class="image-wrapper overlay-image-wrapper">
+              <img id="img-cam-overlay" src="" alt="Pathology Heatmap Overlay" class="stage-img">
+            </div>
+            <!-- Interactive Wipe Divider Handle -->
+            <div id="split-handle" class="split-handle">
+              <div class="handle-line"></div>
+              <div class="handle-button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                  <polyline points="9 18 3 12 9 6" style="display:none"></polyline>
+                </svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Side-by-side Container (Hidden by default) -->
+          <div id="side-by-side-container" class="side-by-side-container" style="display: none;">
+            <div class="side-pane">
+              <div class="pane-label">Original Thoracic Radiograph</div>
+              <img id="img-side-base" src="" alt="Original Radiograph" class="stage-img">
+            </div>
+            <div class="side-pane">
+              <div class="pane-label">CheXNet CAM Localization Map</div>
+              <img id="img-side-cam" src="" alt="CAM Heatmap" class="stage-img">
+            </div>
+          </div>
+
+          <!-- Active Pathology Focus Banner -->
+          <div id="active-pathology-banner" class="active-banner" style="display: none;">
+            <div class="active-banner-label">Active CAM Projection:</div>
+            <div id="active-pathology-name" class="active-banner-name">Mass (>3cm)</div>
+            <div id="active-pathology-prob" class="active-banner-prob">93.2% Probability</div>
+            <div class="active-banner-hint">(Click any disease below to switch localization focus)</div>
+          </div>
+
+          <!-- Stage Placeholder when no image loaded -->
+          <div id="stage-placeholder" class="stage-placeholder">
+            <div class="placeholder-graphic">
+              <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            </div>
+            <h2 class="placeholder-title">No Radiograph Selected</h2>
+            <p class="placeholder-sub">Select one of the sample cases from the left panel or upload your own chest X-ray to start neural analysis and CAM localization.</p>
+          </div>
+
+          <!-- Loading Spinner Overlay -->
+          <div id="loading-overlay" class="loading-overlay" style="display: none;">
+            <div class="spinner-ring"></div>
+            <div class="loading-title">Neural Forward Pass & CAM Computing...</div>
+            <div class="loading-sub">Evaluating 14 disease channels on DenseNet-121</div>
+          </div>
+
+          <!-- Sample Rejection Banner Overlay -->
+          <div id="rejection-overlay" class="rejection-overlay" style="display: none;">
+            <div class="rejection-card">
+              <div class="rejection-icon">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+              <div class="rejection-badge">NON-CHEST SAMPLE REJECTED</div>
+              <h3 class="rejection-title">Sample Not Acceptable</h3>
+              <p id="rejection-note-text" class="rejection-note">This sample is not acceptable. Please upload a genuine frontal chest (lung) radiograph.</p>
+              <p class="rejection-explanation">CheXNet requires standard frontal thoracic radiographs (PA/AP projections). Arbitrary photos, non-medical graphics, and non-chest imaging are strictly rejected to maintain clinical diagnostic integrity.</p>
+              <div class="rejection-actions">
+                <button id="btn-rejection-preset" class="btn btn-primary btn-sm">Load Valid Chest X-Ray</button>
+                <button id="btn-rejection-dismiss" class="btn btn-secondary btn-sm">Dismiss</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric Ticker Bar -->
+        <div class="viewer-meta-bar">
+          <div class="meta-item">
+            <span class="meta-label">PRIMARY PREDICTION</span>
+            <span id="meta-primary" class="meta-value">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">INFERENCE LATENCY</span>
+            <span id="meta-latency" class="meta-value">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">HOTSPOT FOCUS</span>
+            <span id="meta-hotspot" class="meta-value">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">INPUT MATRIX</span>
+            <span id="meta-resolution" class="meta-value">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 14 Thoracic Diseases Interactive Diagnostic Matrix -->
+      <section class="card disease-matrix-section">
+        <div class="matrix-header">
+          <div>
+            <h2>Thoracic Pathology Breakdown (14 Classes)</h2>
+            <p class="matrix-sub">Probabilities evaluated simultaneously via sigmoid multi-label head. Click any disease card to view its corresponding Class Activation Map (CAM).</p>
+          </div>
+          <div class="matrix-legend">
+            <span class="legend-chip risk-high"><span class="chip-dot"></span> High (≥50%)</span>
+            <span class="legend-chip risk-moderate"><span class="chip-dot"></span> Moderate (20-49%)</span>
+            <span class="legend-chip risk-low"><span class="chip-dot"></span> Low (&lt;20%)</span>
+          </div>
+        </div>
+
+        <div id="disease-grid" class="disease-grid">
+          <!-- Dynamically populated with 14 disease cards -->
+          <div class="grid-empty">Awaiting image analysis...</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Benchmark & Testing Modal -->
+  <div id="benchmark-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          CheXNet Model Testing & Performance Benchmark
+        </div>
+        <button id="btn-close-benchmark" class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="benchmark-hero">
+          <div class="bench-stat-card">
+            <div class="stat-num" id="bench-avg-lat">—</div>
+            <div class="stat-lbl">Avg Latency (ms)</div>
+          </div>
+          <div class="bench-stat-card">
+            <div class="stat-num" id="bench-fps">—</div>
+            <div class="stat-lbl">Throughput (FPS)</div>
+          </div>
+          <div class="bench-stat-card">
+            <div class="stat-num" id="bench-params">6.97M</div>
+            <div class="stat-lbl">Parameters</div>
+          </div>
+          <div class="bench-stat-card">
+            <div class="stat-num" id="bench-device">CPU</div>
+            <div class="stat-lbl">Compute Target</div>
+          </div>
+        </div>
+
+        <div class="bench-controls">
+          <button id="btn-run-benchmark" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Execute Real-Time Stress Test (15 Inferences)
+          </button>
+          <span id="bench-status" class="bench-status-msg">Ready to run benchmark</span>
+        </div>
+
+        <!-- Real-Time Trial Results Table -->
+        <div class="table-container" style="margin-top: 1.25rem;">
+          <h4>Live Inference Trial Metrics</h4>
+          <table class="bench-table" id="bench-trials-table">
+            <thead>
+              <tr>
+                <th>Test Image</th>
+                <th>Top Predicted Class</th>
+                <th>Confidence</th>
+                <th>Min (ms)</th>
+                <th>Avg (ms)</th>
+                <th>Max (ms)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="text-center text-muted">Click 'Execute Real-Time Stress Test' to record latency distribution.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Academic AUROC Comparison Table from CheXNet Paper -->
+        <div class="table-container" style="margin-top: 1.5rem;">
+          <h4>Stanford / PKU Paper AUROC Comparison (112,120 ChestX-ray14 Studies)</h4>
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th>Thoracic Pathology</th>
+                <th>CheXNet Paper</th>
+                <th>Implemented Model</th>
+                <th>Improved Model</th>
+                <th>Performance Delta</th>
+              </tr>
+            </thead>
+            <tbody id="auroc-tbody">
+              <!-- Dynamically populated from /api/info -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-close-benchmark-footer" class="btn btn-secondary">Close Benchmark</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Architecture & System Info Modal -->
+  <div id="info-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          About CheXNet Architecture & Localization
+        </div>
+        <button id="btn-close-info" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-content">
+          <p><strong>CheXNet</strong> is a 121-layer Dense Convolutional Network (DenseNet-121) trained on the <em>NIH ChestX-ray14</em> dataset comprising 112,120 frontal-view chest radiographs from 30,805 unique patients.</p>
+          
+          <h4>Key Architectural Highlights</h4>
+          <ul>
+            <li><strong>Dense Connectivity:</strong> Direct connections from each layer to all subsequent layers ensure maximum information and gradient flow across deep feature hierarchies.</li>
+            <li><strong>Global Average Pooling + Linear Layer:</strong> Replaces traditional dense classification layers with a 1024-dimensional feature vector, drastically reducing overfitting risk.</li>
+            <li><strong>Multi-Label Sigmoid Activation:</strong> Outputs independent probability estimates for each of the 14 non-mutually exclusive thoracic pathologies.</li>
+            <li><strong>Class Activation Mapping (CAM):</strong> Uses the final convolutional feature maps before global pooling, weighted by the linear classifier weights for class $c$, to produce interpretable pixel-level pathology heatmaps.</li>
+          </ul>
+
+          <h4>Evaluated Thoracic Pathologies (14 Classes)</h4>
+          <div class="class-tag-list">
+            <span class="class-tag">Atelectasis</span>
+            <span class="class-tag">Cardiomegaly</span>
+            <span class="class-tag">Effusion</span>
+            <span class="class-tag">Infiltration</span>
+            <span class="class-tag">Mass</span>
+            <span class="class-tag">Nodule</span>
+            <span class="class-tag">Pneumonia</span>
+            <span class="class-tag">Pneumothorax</span>
+            <span class="class-tag">Consolidation</span>
+            <span class="class-tag">Edema</span>
+            <span class="class-tag">Emphysema</span>
+            <span class="class-tag">Fibrosis</span>
+            <span class="class-tag">Pleural Thickening</span>
+            <span class="class-tag">Hernia</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-close-info-footer" class="btn btn-secondary">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
