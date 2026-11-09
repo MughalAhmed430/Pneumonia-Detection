@@ -5,3 +5,7 @@ venv/
 .env
 .idea/
 .vscode/
+
+# NIH ChestX-ray14 images are downloaded separately
+CheXNet/ChestX-ray14/images/*
+!CheXNet/ChestX-ray14/images/.keep

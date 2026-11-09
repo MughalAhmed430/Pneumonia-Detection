@@ -26,37 +26,37 @@ engine = CheXNetEngine(ckpt_path=os.path.join(BASE_DIR, 'model.pth.tar'))
 SAMPLE_METADATA = [
     {
         'id': 'sample_5_nih_patient.png',
-        'title': 'NIH Patient #00030605 (Solitary Mass & Consolidation)',
-        'category': 'Clinical Study (Real Patient)',
-        'description': 'Real NIH ChestX-ray14 patient radiograph showing marked focal mass and consolidation.',
+        'title': 'Mass, Consolidation & Effusion',
+        'category': 'NIH ChestX-ray14 Test Set',
+        'description': 'Image 00000920_001.png. NIH labels: Mass, Consolidation, Effusion.',
         'path': os.path.join(SAMPLES_DIR, 'sample_5_nih_patient.png')
     },
     {
         'id': 'sample_cardiomegaly.png',
-        'title': 'Cardiomegaly Radiograph',
-        'category': 'Cardiovascular Pathology',
-        'description': 'Marked enlargement of the cardiac silhouette with prominent transverse cardiac diameter.',
+        'title': 'Cardiomegaly',
+        'category': 'NIH ChestX-ray14 Test Set',
+        'description': 'Image 00000864_000.png. NIH label: Cardiomegaly.',
         'path': os.path.join(SAMPLES_DIR, 'sample_cardiomegaly.png')
     },
     {
         'id': 'sample_pneumonia.png',
-        'title': 'Pneumonia / Consolidation',
-        'category': 'Infectious / Alveolar',
-        'description': 'Dense alveolar opacity with consolidation in right lower/middle lung fields.',
+        'title': 'Pneumonia',
+        'category': 'NIH ChestX-ray14 Test Set',
+        'description': 'Image 00001021_000.png. NIH label: Pneumonia.',
         'path': os.path.join(SAMPLES_DIR, 'sample_pneumonia.png')
     },
     {
         'id': 'sample_effusion.png',
-        'title': 'Pleural Effusion Study',
-        'category': 'Pleural Pathology',
-        'description': 'Blunting of the costophrenic angle and meniscus contour consistent with pleural fluid.',
+        'title': 'Pleural Effusion',
+        'category': 'NIH ChestX-ray14 Test Set',
+        'description': 'Image 00000402_009.png. NIH label: Effusion.',
         'path': os.path.join(SAMPLES_DIR, 'sample_effusion.png')
     },
     {
         'id': 'sample_normal.png',
-        'title': 'Normal Chest Radiograph',
-        'category': 'Normal Thorax',
-        'description': 'Clear bilateral lung fields, sharp costophrenic sulci, and standard cardiothoracic ratio.',
+        'title': 'No Finding',
+        'category': 'NIH ChestX-ray14 Test Set',
+        'description': 'Image 00001215_000.png. NIH label: No Finding.',
         'path': os.path.join(SAMPLES_DIR, 'sample_normal.png')
     }
 ]
